@@ -27,6 +27,7 @@ const ctx = await esbuild.context({
   logLevel: "info",
   sourcemap: watch ? "inline" : false,
   treeShaking: true,
+  minify: !watch,
 });
 
 if (watch) {

@@ -8,7 +8,7 @@
  * comment line in a mermaid block to override the global default.
  */
 
-import { Plugin, PluginSettingTab, App, Setting } from 'obsidian'
+import { Plugin, PluginSettingTab, App, Setting, Menu, Notice } from 'obsidian'
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view'
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid'
 import { renderMermaidASCII } from 'beautiful-mermaid'
@@ -17,12 +17,17 @@ import type { AsciiRenderOptions } from 'beautiful-mermaid'
 
 type RenderMode = 'svg' | 'ascii'
 
+const LIGHT_THEMES = ['zinc-light', 'tokyo-night-light', 'catppuccin-latte', 'nord-light', 'github-light', 'solarized-light']
+const DARK_THEMES = ['zinc-dark', 'tokyo-night', 'tokyo-night-storm', 'catppuccin-mocha', 'nord', 'dracula', 'github-dark', 'solarized-dark', 'one-dark']
+
 interface BeautifulMermaidSettings {
 	themeLight: string
 	themeDark: string
 	font: string
 	transparent: boolean
 	defaultMode: RenderMode
+	customBg: string
+	customFg: string
 }
 
 const DEFAULT_SETTINGS: BeautifulMermaidSettings = {
@@ -31,6 +36,8 @@ const DEFAULT_SETTINGS: BeautifulMermaidSettings = {
 	font: 'Inter',
 	transparent: false,
 	defaultMode: 'svg',
+	customBg: '',
+	customFg: '',
 }
 
 /** Check for a `%% ascii` or `%% svg` directive and return [mode, cleanedSource]. */
@@ -75,7 +82,7 @@ function buildMermaidPlugin(plugin: BeautifulMermaidPlugin) {
 				const blocks = view.dom.querySelectorAll<HTMLElement>(
 					'.cm-preview-code-block.cm-lang-mermaid',
 				)
-				const settingsKey = `${plugin.resolveTheme()}:${plugin.settings.font}:${plugin.settings.transparent}:${plugin.settings.defaultMode}`
+				const settingsKey = `${plugin.activeTheme()}:${plugin.settings.font}:${plugin.settings.transparent}:${plugin.settings.defaultMode}:${plugin.settings.customBg}:${plugin.settings.customFg}`
 
 				for (const block of blocks) {
 					// Skip if already processed with current settings
@@ -86,13 +93,7 @@ function buildMermaidPlugin(plugin: BeautifulMermaidPlugin) {
 					const source = extractSourceAtPos(view, pos)
 					if (!source) continue
 
-					// Replace content inside Obsidian's inner .mermaid div, preserving
-					// the outer widget wrapper and .edit-block-button that CM6 uses
-					// for click-to-toggle-source.
-					const mermaidDiv = block.querySelector<HTMLElement>(':scope > div.mermaid')
-					if (!mermaidDiv) continue // Obsidian hasn't rendered yet; retry next cycle
-
-					plugin.renderIntoElement(source, mermaidDiv)
+					plugin.renderIntoElement(source, block)
 					block.setAttribute(MARKER_ATTR, settingsKey)
 				}
 			}
@@ -132,60 +133,87 @@ function extractSourceAtPos(view: EditorView, pos: number): string | null {
 
 export default class BeautifulMermaidPlugin extends Plugin {
 	settings: BeautifulMermaidSettings = DEFAULT_SETTINGS
+	private wasDark = document.body.classList.contains('theme-dark')
 
 	async onload() {
 		await this.loadSettings()
 
 		// Reading View: registered processor replaces Obsidian's built-in mermaid
 		this.registerMarkdownCodeBlockProcessor('mermaid', (source, el, ctx) => {
-			this.renderIntoElement(source, el, true)
+			this.renderIntoElement(source, el)
 		}, -100)
 
 		// Live Preview: ViewPlugin swaps Obsidian's embed block content post-render
 		this.registerEditorExtension(buildMermaidPlugin(this))
 
-		// Re-render all diagrams when Obsidian's light/dark mode changes
-		this.registerEvent(this.app.workspace.on('css-change', () => {
-			this.clearAllMarkers()
-		}))
+		// Re-render on dark/light theme change
+		this.registerEvent(
+			this.app.workspace.on('css-change', () => {
+				const isDark = document.body.classList.contains('theme-dark')
+				if (isDark !== this.wasDark) {
+					this.wasDark = isDark
+					this.app.workspace.updateOptions()
+				}
+			}),
+		)
+
+		// Context menu for SVG export
+		this.registerDomEvent(document, 'contextmenu', (evt: MouseEvent) => {
+			const target = evt.target as HTMLElement
+			const container = target.closest('.beautiful-mermaid-container')
+			if (!container) return
+
+			const svg = container.querySelector('svg')
+			if (!svg) return
+
+			const menu = new Menu()
+			const svgString = `<?xml version="1.0" encoding="UTF-8"?>\n${svg.outerHTML}`
+
+			menu.addItem(item =>
+				item.setTitle('Copy SVG to clipboard').setIcon('clipboard-copy').onClick(() => {
+					navigator.clipboard.writeText(svgString)
+					new Notice('SVG copied to clipboard')
+				}),
+			)
+
+			menu.addItem(item =>
+				item.setTitle('Export as SVG file').setIcon('download').onClick(() => {
+					const blob = new Blob([svgString], { type: 'image/svg+xml' })
+					const url = URL.createObjectURL(blob)
+					const a = document.createElement('a')
+					a.href = url
+					a.download = `diagram-${Date.now()}.svg`
+					document.body.appendChild(a)
+					a.click()
+					document.body.removeChild(a)
+					URL.revokeObjectURL(url)
+				}),
+			)
+
+			menu.showAtMouseEvent(evt)
+		})
 
 		this.addSettingTab(new BeautifulMermaidSettingTab(this.app, this))
 	}
 
-	/** Remove all beautiful-mermaid markers so diagrams re-render with the current theme. */
-	clearAllMarkers() {
-		document.querySelectorAll(`[${MARKER_ATTR}]`).forEach(el => {
-			el.removeAttribute(MARKER_ATTR)
-		})
-		// Trigger Live Preview re-processing by requesting a layout update
-		this.app.workspace.updateOptions()
-	}
-
-	/** Render beautiful-mermaid output into a container element.
-	 *  @param expandable — enable click-to-expand (disabled in Live Preview where clicks toggle source mode)
-	 */
-	renderIntoElement(source: string, el: HTMLElement, expandable = false) {
+	/** Render beautiful-mermaid output into a container element. */
+	renderIntoElement(source: string, el: HTMLElement) {
 		el.empty()
 		const [mode, cleanSource] = extractModeDirective(source, this.settings.defaultMode)
 		if (mode === 'ascii') {
-			this.renderAscii(cleanSource, el, expandable)
+			this.renderAscii(cleanSource, el)
 		} else {
-			this.renderSvg(cleanSource, el, expandable)
+			this.renderSvg(cleanSource, el)
 		}
 	}
 
-	renderSvg(source: string, el: HTMLElement, expandable: boolean) {
+	renderSvg(source: string, el: HTMLElement) {
 		const container = el.createDiv({ cls: 'beautiful-mermaid-container' })
 
 		try {
 			const opts = this.buildSvgOptions()
 			const svg = renderMermaidSVG(source.trim(), opts)
 			container.innerHTML = svg
-			if (expandable) {
-				container.addEventListener('click', () => {
-					container.classList.toggle('beautiful-mermaid-expanded')
-				})
-			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)
 			container.createDiv({
@@ -195,7 +223,7 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		}
 	}
 
-	renderAscii(source: string, el: HTMLElement, expandable: boolean) {
+	renderAscii(source: string, el: HTMLElement) {
 		const container = el.createDiv({ cls: 'beautiful-mermaid-ascii' })
 
 		try {
@@ -207,11 +235,6 @@ export default class BeautifulMermaidPlugin extends Plugin {
 			const pre = container.createEl('pre', { cls: 'beautiful-mermaid-ascii-pre' })
 			if (this.settings.transparent) pre.classList.add('beautiful-mermaid-transparent')
 			pre.textContent = text
-			if (expandable) {
-				container.addEventListener('click', () => {
-					container.classList.toggle('beautiful-mermaid-expanded')
-				})
-			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)
 			container.createDiv({
@@ -221,19 +244,21 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		}
 	}
 
-	/** Resolve the active theme based on Obsidian's current color scheme. */
-	resolveTheme(): string {
-		const isDark = (this.app as any).getTheme?.() === 'obsidian' ||
-			document.body.classList.contains('theme-dark')
+	/** Return the active theme name based on Obsidian's current appearance mode. */
+	activeTheme(): string {
+		const isDark = document.body.classList.contains('theme-dark')
 		return isDark ? this.settings.themeDark : this.settings.themeLight
 	}
 
 	buildSvgOptions(): RenderOptions {
 		const opts: RenderOptions = {}
-		const theme = this.resolveTheme()
-		const { font, transparent } = this.settings
+		const theme = this.activeTheme()
+		const { font, transparent, customBg, customFg } = this.settings
 
-		if (theme && theme in THEMES) {
+		if (theme === 'custom') {
+			if (customBg) opts.bg = customBg
+			if (customFg) opts.fg = customFg
+		} else if (theme && theme in THEMES) {
 			const colors = THEMES[theme as keyof typeof THEMES]
 			opts.bg = colors.bg
 			opts.fg = colors.fg
@@ -252,14 +277,16 @@ export default class BeautifulMermaidPlugin extends Plugin {
 
 	async loadSettings() {
 		const saved = await this.loadData() ?? {}
-
-		// Migrate from single `theme` to `themeLight` + `themeDark`
+		// Migrate old single `theme` setting to light/dark split
 		if (saved.theme && !saved.themeLight && !saved.themeDark) {
-			saved.themeLight = saved.theme
-			saved.themeDark = saved.theme
+			const t = saved.theme as string
+			if (DARK_THEMES.includes(t)) {
+				saved.themeDark = t
+			} else {
+				saved.themeLight = t
+			}
 			delete saved.theme
 		}
-
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, saved)
 	}
 
@@ -281,8 +308,6 @@ class BeautifulMermaidSettingTab extends PluginSettingTab {
 		const { containerEl } = this
 		containerEl.empty()
 
-		const themeNames = Object.keys(THEMES)
-
 		new Setting(containerEl)
 			.setName('Default render mode')
 			.setDesc('SVG (themed vector) or ASCII (Unicode box-drawing). Override per diagram with %% ascii or %% svg.')
@@ -297,32 +322,56 @@ class BeautifulMermaidSettingTab extends PluginSettingTab {
 			})
 
 		new Setting(containerEl)
-			.setName('Theme (Light mode)')
-			.setDesc('Color theme used when Obsidian is in light mode')
+			.setName('Light theme')
+			.setDesc('Theme used when Obsidian is in light mode')
 			.addDropdown(drop => {
-				for (const name of themeNames) {
-					drop.addOption(name, name)
-				}
+				for (const name of LIGHT_THEMES) drop.addOption(name, name)
+				drop.addOption('custom', 'Custom')
 				drop.setValue(this.plugin.settings.themeLight)
 				drop.onChange(async (value) => {
 					this.plugin.settings.themeLight = value
 					await this.plugin.saveSettings()
+					this.display()
 				})
 			})
 
 		new Setting(containerEl)
-			.setName('Theme (Dark mode)')
-			.setDesc('Color theme used when Obsidian is in dark mode')
+			.setName('Dark theme')
+			.setDesc('Theme used when Obsidian is in dark mode')
 			.addDropdown(drop => {
-				for (const name of themeNames) {
-					drop.addOption(name, name)
-				}
+				for (const name of DARK_THEMES) drop.addOption(name, name)
+				drop.addOption('custom', 'Custom')
 				drop.setValue(this.plugin.settings.themeDark)
 				drop.onChange(async (value) => {
 					this.plugin.settings.themeDark = value
 					await this.plugin.saveSettings()
+					this.display()
 				})
 			})
+
+		if (this.plugin.settings.themeLight === 'custom' || this.plugin.settings.themeDark === 'custom') {
+			new Setting(containerEl)
+				.setName('Custom background')
+				.setDesc('Background color for custom theme')
+				.addColorPicker(picker => {
+					picker.setValue(this.plugin.settings.customBg || '#ffffff')
+					picker.onChange(async (value) => {
+						this.plugin.settings.customBg = value
+						await this.plugin.saveSettings()
+					})
+				})
+
+			new Setting(containerEl)
+				.setName('Custom foreground')
+				.setDesc('Text/line color for custom theme')
+				.addColorPicker(picker => {
+					picker.setValue(this.plugin.settings.customFg || '#000000')
+					picker.onChange(async (value) => {
+						this.plugin.settings.customFg = value
+						await this.plugin.saveSettings()
+					})
+				})
+		}
 
 		new Setting(containerEl)
 			.setName('Font')
