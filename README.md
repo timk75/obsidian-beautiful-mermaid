@@ -6,19 +6,11 @@ Obsidian ships with Mermaid support out of the box, but the default renderer off
 
 > We believe beautiful-mermaid represents the future of diagram rendering in note-taking tools. This plugin brings that experience to Obsidian today. If and when Obsidian adopts beautiful-mermaid natively, this plugin will no longer be needed — until then, it bridges the gap.
 
-### SVG Mode (Catppuccin Mocha theme)
-
 | Flowchart | Sequence Diagram |
 |:---------:|:----------------:|
-| ![Flowchart — SVG](screenshots/flowchart-svg.png) | ![Sequence Diagram — SVG](screenshots/sequence-svg.png) |
+| ![Flowchart](screenshots/flowchart-svg.png) | ![Sequence Diagram](screenshots/sequence-svg.png) |
 
-### ASCII Mode
-
-| Flowchart | Sequence Diagram |
-|:---------:|:----------------:|
-| ![Flowchart — ASCII](screenshots/flowchart-ascii.png) | ![Sequence Diagram — ASCII](screenshots/sequence-ascii.png) |
-
-See [showcase.md](showcase.md) for all 5 diagram types rendered in both modes — open it in Obsidian with the plugin enabled.
+*Catppuccin Mocha theme. See [showcase.md](showcase.md) for all 5 diagram types — open it in Obsidian with the plugin enabled.*
 
 ## What It Does
 
