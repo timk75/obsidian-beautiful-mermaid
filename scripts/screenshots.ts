@@ -16,9 +16,9 @@ import { resolve } from 'path'
 // ── Diagram sources ──────────────────────────────────────────────────
 
 const FLOWCHART_SOURCE = `graph TD
-  Start([Start]) --> Creds[Enter Credentials]
+  Start[Start] --> Creds[Enter Credentials]
   Creds --> Validate{Validate}
-  Validate -->|Valid| Success([Access Granted])
+  Validate -->|Valid| Success[Access Granted]
   Validate -->|Invalid| Retry[Show Error]
   Retry --> Creds`
 
