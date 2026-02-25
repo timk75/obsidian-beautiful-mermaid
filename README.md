@@ -1,19 +1,54 @@
 # Beautiful Mermaid
 
-An [Obsidian](https://obsidian.md) plugin that replaces the default Mermaid rendering with [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) — themed, high-quality SVG output for all your diagrams.
+An [Obsidian](https://obsidian.md) plugin that replaces the built-in Mermaid renderer with [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) — a modern rendering engine focused on aesthetics and flexibility.
+
+Obsidian ships with Mermaid support out of the box, but the default renderer offers limited theming and no control over fonts, backgrounds, or output format. This plugin swaps in beautiful-mermaid so every `mermaid` code block in your vault is rendered with the theme, font, and style you choose — in both Reading View and Live Preview.
+
+> We believe beautiful-mermaid represents the future of diagram rendering in note-taking tools. This plugin brings that experience to Obsidian today. If and when Obsidian adopts beautiful-mermaid natively, this plugin will no longer be needed — until then, it bridges the gap.
+
+## What It Does
+
+When you enable this plugin, every ` ```mermaid ` code block in your vault is intercepted before Obsidian's default renderer touches it. Instead, the diagram source is passed to beautiful-mermaid, which:
+
+1. **Parses** the Mermaid syntax and calculates layout using ELK.js (synchronous — no async delays)
+2. **Renders** a themed SVG using your chosen color palette and font, or optionally renders Unicode box-drawing art for a terminal-style look
+3. **Displays** the result inline, exactly where Obsidian would normally show its default diagram
+
+This works in both **Reading View** (via a registered code block processor) and **Live Preview** (via a CodeMirror 6 ViewPlugin that detects rendered mermaid embed blocks and replaces their content).
 
 ## Features
 
-- **15 built-in themes** — Catppuccin (Latte, Frappe, Macchiato, Mocha), Dracula, Nord, Gruvbox, Solarized, Tokyo Night, One Dark, Rose Pine, and more
-- **Custom fonts** — use any installed font for diagram text
-- **Transparent backgrounds** — render diagrams without a background color
-- **ASCII mode** — render diagrams as Unicode box-drawing text
-- **Per-diagram overrides** — use `%% ascii` or `%% svg` as the first comment in a mermaid block to override the global default
-- **Live Preview support** — diagrams render in both Reading View and Live Preview
+- **15 built-in themes** — Catppuccin (Latte, Frappe, Macchiato, Mocha), Dracula, Nord, Gruvbox (Light, Dark), Solarized (Light, Dark), Tokyo Night, One Dark, Rose Pine (default, Moon, Dawn)
+- **Custom fonts** — use any font installed on your system for diagram text (default: Inter)
+- **Transparent backgrounds** — render SVG diagrams with no background, so they blend with your vault theme
+- **ASCII mode** — render diagrams as Unicode box-drawing text instead of SVG, useful for a minimalist or terminal-inspired aesthetic
+- **Per-diagram overrides** — add `%% ascii` or `%% svg` as the first comment line in any mermaid block to override the global default for that specific diagram
+- **Live Preview support** — diagrams re-render in real time as you edit, not just in Reading View
+- **Synchronous rendering** — no flicker or loading states; diagrams appear instantly
+- **Two-color foundation** — each theme derives its full palette from background and foreground colors using CSS `color-mix()`, producing harmonious, consistent output
+
+### Supported Diagram Types
+
+- Flowcharts (all directions: TD, LR, BT, RL)
+- Sequence diagrams
+- State diagrams
+- Class diagrams
+- ER diagrams
 
 ## Installation
 
-### From Community Plugins (coming soon)
+### BRAT (recommended for early adopters)
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) lets you install plugins directly from GitHub without waiting for community plugin review.
+
+1. Install the **BRAT** plugin from Community Plugins if you haven't already
+2. Open **Settings > BRAT > Add Beta plugin**
+3. Enter: `timk75/obsidian-beautiful-mermaid`
+4. Click **Add Plugin**, then enable **Beautiful Mermaid** in Community Plugins
+
+BRAT will automatically notify you when new versions are released.
+
+### Community Plugins (coming soon)
 
 1. Open **Settings > Community plugins**
 2. Search for **Beautiful Mermaid**
@@ -22,7 +57,7 @@ An [Obsidian](https://obsidian.md) plugin that replaces the default Mermaid rend
 ### Manual
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/timk75/obsidian-beautiful-mermaid/releases/latest)
-2. Create a folder `beautiful-mermaid` in your vault's `.obsidian/plugins/` directory
+2. Create a folder `beautiful-mermaid` inside your vault's `.obsidian/plugins/` directory
 3. Copy the three files into that folder
 4. Enable the plugin in **Settings > Community plugins**
 
@@ -37,17 +72,34 @@ An [Obsidian](https://obsidian.md) plugin that replaces the default Mermaid rend
 
 ## Available Themes
 
-catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha, dracula, nord, gruvbox-light, gruvbox-dark, solarized-light, solarized-dark, tokyo-night, one-dark, rose-pine, rose-pine-moon, rose-pine-dawn
+| Theme | Style |
+|-------|-------|
+| catppuccin-latte | Light, pastel |
+| catppuccin-frappe | Medium dark, muted |
+| catppuccin-macchiato | Dark, warm |
+| catppuccin-mocha | Dark, rich |
+| dracula | Dark, vibrant |
+| nord | Dark, cool blue |
+| gruvbox-light | Light, warm retro |
+| gruvbox-dark | Dark, warm retro |
+| solarized-light | Light, precision |
+| solarized-dark | Dark, precision |
+| tokyo-night | Dark, neon accents |
+| one-dark | Dark, balanced |
+| rose-pine | Dark, muted rose |
+| rose-pine-moon | Dark, softer rose |
+| rose-pine-dawn | Light, warm rose |
 
 ## Per-Diagram Overrides
 
-Add a `%%` comment directive as the first line of a mermaid code block to override the global render mode:
+Add a `%%` comment directive as the first line of a mermaid code block to override the global render mode for that specific diagram:
 
 ````markdown
 ```mermaid
 %% ascii
 graph TD
-    A --> B
+    A[Start] --> B[Process]
+    B --> C[End]
 ```
 ````
 
@@ -56,9 +108,41 @@ graph TD
 %% svg
 sequenceDiagram
     Alice->>Bob: Hello
+    Bob-->>Alice: Hi back
 ```
 ````
 
+This is useful when you want most diagrams in SVG but prefer ASCII for a specific simple flowchart, or vice versa.
+
+## How It Works
+
+The plugin registers two rendering hooks:
+
+1. **Reading View** — a Markdown code block processor (registered at priority -100 to run before Obsidian's built-in mermaid processor) intercepts every `mermaid` block and renders it with beautiful-mermaid
+2. **Live Preview** — a CodeMirror 6 `ViewPlugin` watches for `.cm-preview-code-block.cm-lang-mermaid` elements in the editor DOM, extracts the mermaid source from the document state, and replaces the content with beautiful-mermaid output
+
+Both paths share the same rendering logic: parse the settings, check for per-diagram `%% ascii`/`%% svg` directives, and call the appropriate beautiful-mermaid render function.
+
+A marker attribute (`data-beautiful-mermaid`) tracks which blocks have been processed and with which settings, so diagrams only re-render when the source or settings actually change.
+
+## Versioning and Releases
+
+This plugin tracks the [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) npm package. When a new version of beautiful-mermaid is released with new features, themes, or diagram type support, we publish a corresponding plugin update to bring those improvements to Obsidian.
+
+- **Plugin version** follows semver independently, but each release notes which beautiful-mermaid version it includes
+- **Release artifacts** (`main.js`, `manifest.json`, `styles.css`) are built automatically via GitHub Actions on every tagged release
+
+## Roadmap
+
+- Screenshots and visual examples in this README
+- Support for additional diagram types as beautiful-mermaid adds them
+- Custom theme support (define your own background/foreground colors)
+- Export diagrams as standalone SVG files
+
 ## Credits
 
-Powered by [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid).
+Powered by [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) by [Luki Labs](https://github.com/lukilabs).
+
+## License
+
+[MIT](LICENSE)
