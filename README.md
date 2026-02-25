@@ -12,6 +12,12 @@ Obsidian ships with Mermaid support out of the box, but the default renderer off
 |:---------:|:----------------:|
 | ![Flowchart — SVG](screenshots/flowchart-svg.png) | ![Sequence Diagram — SVG](screenshots/sequence-svg.png) |
 
+### ASCII Mode
+
+| Flowchart | Sequence Diagram |
+|:---------:|:----------------:|
+| ![Flowchart — ASCII](screenshots/flowchart-ascii.png) | ![Sequence Diagram — ASCII](screenshots/sequence-ascii.png) |
+
 See [showcase.md](showcase.md) for all 5 diagram types in both SVG and ASCII modes — open it in Obsidian with the plugin enabled.
 
 ## What It Does
