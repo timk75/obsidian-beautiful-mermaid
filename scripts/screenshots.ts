@@ -43,8 +43,8 @@ interface ScreenshotConfig {
 const CONFIGS: ScreenshotConfig[] = [
   { name: 'flowchart-svg', mode: 'svg', source: FLOWCHART_SOURCE, theme: latte },
   { name: 'sequence-svg', mode: 'svg', source: SEQUENCE_SOURCE, theme: latte },
-  { name: 'flowchart-ascii', mode: 'ascii', source: FLOWCHART_SOURCE, theme: mocha },
-  { name: 'sequence-ascii', mode: 'ascii', source: SEQUENCE_SOURCE, theme: mocha },
+  { name: 'flowchart-ascii', mode: 'ascii', source: FLOWCHART_SOURCE, theme: latte },
+  { name: 'sequence-ascii', mode: 'ascii', source: SEQUENCE_SOURCE, theme: latte },
 ]
 
 // ── Rendering helpers ────────────────────────────────────────────────
