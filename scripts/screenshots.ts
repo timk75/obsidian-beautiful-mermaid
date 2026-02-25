@@ -107,9 +107,10 @@ function renderAsciiHtml(source: string, theme: typeof mocha): string {
       padding: 32px;
     }
     #diagram {
-      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-      font-size: 14px;
-      line-height: 1.4;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      line-height: 1.0;
+      letter-spacing: 0;
       color: ${theme.fg};
       white-space: pre;
       padding: 24px;
