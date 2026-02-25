@@ -33,6 +33,8 @@ This works in both **Reading View** (via a registered code block processor) and 
 ## Features
 
 - **15 built-in themes** — Catppuccin (Latte, Frappe, Macchiato, Mocha), Dracula, Nord, Gruvbox (Light, Dark), Solarized (Light, Dark), Tokyo Night, One Dark, Rose Pine (default, Moon, Dawn)
+- **Automatic light/dark mode** — set separate themes for light and dark mode; diagrams re-render automatically when you toggle Obsidian's appearance
+- **Click to expand** — wide diagrams fit to container width by default; click/tap to expand to natural size with horizontal scrolling, click again to collapse
 - **Custom fonts** — use any font installed on your system for diagram text (default: Inter)
 - **Transparent backgrounds** — render SVG diagrams with no background, so they blend with your vault theme
 - **ASCII mode** — render diagrams as Unicode box-drawing text instead of SVG, useful for a minimalist or terminal-inspired aesthetic
@@ -80,7 +82,8 @@ BRAT will automatically notify you when new versions are released.
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Default render mode | SVG (themed vector) or ASCII (Unicode box-drawing) | SVG |
-| Theme | Color theme for SVG diagrams | catppuccin-latte |
+| Theme (Light mode) | Color theme used when Obsidian is in light mode | catppuccin-latte |
+| Theme (Dark mode) | Color theme used when Obsidian is in dark mode | catppuccin-mocha |
 | Font | Font family for diagram text | Inter |
 | Transparent background | Render with no background color | Off |
 

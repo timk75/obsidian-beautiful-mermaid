@@ -26,6 +26,27 @@
   background: var(--code-background);
 }
 
+/* Click-to-expand only in Reading View */
+.markdown-reading-view .beautiful-mermaid-container,
+.markdown-reading-view .beautiful-mermaid-ascii {
+  overflow-x: hidden;
+  cursor: zoom-in;
+}
+
+.markdown-reading-view .beautiful-mermaid-container.beautiful-mermaid-expanded,
+.markdown-reading-view .beautiful-mermaid-ascii.beautiful-mermaid-expanded {
+  overflow-x: auto;
+  cursor: zoom-out;
+}
+
+.markdown-reading-view .beautiful-mermaid-container.beautiful-mermaid-expanded svg {
+  max-width: none;
+}
+
+.markdown-reading-view .beautiful-mermaid-expanded .beautiful-mermaid-ascii-pre {
+  max-width: none;
+}
+
 .beautiful-mermaid-transparent {
   background: transparent !important;
   border: none !important;
