@@ -1,0 +1,22 @@
+{
+  "name": "obsidian-beautiful-mermaid",
+  "version": "0.1.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/timk75/obsidian-beautiful-mermaid"
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch"
+  },
+  "dependencies": {
+    "beautiful-mermaid": "^1.0.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.8.0",
+    "typescript": "^5.8.0",
+    "@types/node": "^22.0.0"
+  }
+}
