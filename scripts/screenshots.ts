@@ -109,7 +109,7 @@ function renderAsciiHtml(source: string, theme: typeof mocha): string {
     #diagram {
       font-family: 'JetBrains Mono', monospace;
       font-size: 16px;
-      line-height: 1.0;
+      line-height: 0.95;
       letter-spacing: 0;
       color: ${theme.fg};
       white-space: pre;
