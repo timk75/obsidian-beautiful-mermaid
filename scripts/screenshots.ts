@@ -1,189 +1,158 @@
 /**
  * Automated screenshot generator for beautiful-mermaid README.
  *
- * Uses Playwright (headless Chromium) to render SVG and ASCII diagrams
- * produced by beautiful-mermaid, then captures clean PNG screenshots.
+ * Uses `obsidian eval` + Electron's capturePage() to capture diagrams
+ * directly from Obsidian's renderer — pixel-perfect, no browser seams.
+ *
+ * Prerequisites:
+ *   - Obsidian running with Engram vault open
+ *   - "Beautiful Mermaid Test" note open (4 diagrams: flowchart + sequence, SVG + ASCII)
+ *   - Obsidian in light mode for README screenshots
  *
  * Run: bun run scripts/screenshots.ts
  */
 
-import { chromium } from 'playwright'
-import { renderMermaidSVG, renderMermaidASCII, THEMES } from 'beautiful-mermaid'
-import type { RenderOptions } from 'beautiful-mermaid'
-import type { AsciiRenderOptions } from 'beautiful-mermaid'
+import { execSync } from 'child_process'
 import { resolve } from 'path'
-
-// ── Diagram sources ──────────────────────────────────────────────────
-
-const FLOWCHART_SOURCE = `graph TD
-  Start[Start] --> Creds[Enter Credentials]
-  Creds --> Validate{Validate}
-  Validate -->|Valid| Success[Access Granted]
-  Validate -->|Invalid| Retry[Show Error]
-  Retry --> Creds`
-
-const SEQUENCE_SOURCE = `sequenceDiagram
-  Client->>Server: POST /login
-  Server->>DB: SELECT user
-  DB-->>Server: user row
-  Server-->>Client: 200 OK + token`
+import { writeFileSync } from 'fs'
 
 // ── Screenshot configs ───────────────────────────────────────────────
 
-const latte = THEMES['catppuccin-latte']
-const mocha = THEMES['catppuccin-mocha']
-
 interface ScreenshotConfig {
   name: string
-  mode: 'svg' | 'ascii'
-  source: string
-  theme: typeof latte
+  selector: string
+  index: number
 }
 
 const CONFIGS: ScreenshotConfig[] = [
-  { name: 'flowchart-svg', mode: 'svg', source: FLOWCHART_SOURCE, theme: latte },
-  { name: 'sequence-svg', mode: 'svg', source: SEQUENCE_SOURCE, theme: latte },
-  { name: 'flowchart-ascii', mode: 'ascii', source: FLOWCHART_SOURCE, theme: latte },
-  { name: 'sequence-ascii', mode: 'ascii', source: SEQUENCE_SOURCE, theme: latte },
+  { name: 'flowchart-svg',   selector: '.beautiful-mermaid-container', index: 0 },
+  { name: 'flowchart-ascii', selector: '.beautiful-mermaid-ascii',     index: 0 },
+  { name: 'sequence-svg',    selector: '.beautiful-mermaid-container', index: 1 },
+  { name: 'sequence-ascii',  selector: '.beautiful-mermaid-ascii',     index: 1 },
 ]
 
-// ── Rendering helpers ────────────────────────────────────────────────
+const outDir = resolve(import.meta.dir, '..', 'screenshots')
+const PAD = 24
 
-function renderSvgHtml(source: string, theme: typeof latte): string {
-  const opts: RenderOptions = {
-    bg: theme.bg,
-    fg: theme.fg,
-    line: theme.line,
-    accent: theme.accent,
-    muted: theme.muted,
-    surface: theme.surface,
-    border: theme.border,
-    font: 'Inter',
-  }
-  const svg = renderMermaidSVG(source, opts)
+// ── Helpers ──────────────────────────────────────────────────────────
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: ${theme.bg};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 32px;
-    }
-    #diagram { display: inline-block; }
-  </style>
-</head>
-<body>
-  <div id="diagram">${svg}</div>
-</body>
-</html>`
+function obsidianEval(code: string): string {
+  // Write code to a temp file to avoid shell quoting issues
+  const tmpFile = '/tmp/_obsidian_eval_code.js'
+  writeFileSync(tmpFile, code)
+  const result = execSync(
+    `obsidian eval code="$(cat ${tmpFile})" 2>/dev/null`,
+    { encoding: 'utf-8', timeout: 15000 }
+  )
+  return result.trim()
 }
 
-function renderAsciiHtml(source: string, theme: typeof mocha): string {
-  const opts: AsciiRenderOptions = {
-    colorMode: 'none',
-    useAscii: false,
-  }
-  const text = renderMermaidASCII(source, opts)
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: ${theme.bg};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 32px;
-    }
-    #diagram {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 16px;
-      line-height: 0.95;
-      letter-spacing: 0;
-      color: ${theme.fg};
-      white-space: pre;
-      padding: 24px;
-      border-radius: 8px;
-      background: ${theme.bg};
-    }
-  </style>
-</head>
-<body>
-  <div id="diagram">${escapeHtml(text)}</div>
-</body>
-</html>`
+function sleep(ms: number): void {
+  execSync(`sleep ${ms / 1000}`)
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+function ensureLightMode(): void {
+  const theme = obsidianEval(
+    `document.body.classList.contains('theme-dark') ? 'dark' : 'light'`
+  )
+  if (theme.includes('dark')) {
+    obsidianEval(`app.vault.setConfig('theme', 'moonstone'); 'switched'`)
+    sleep(500)
+    console.log('  Switched Obsidian to light mode')
+  }
+}
+
+function ensureTestNoteOpen(): void {
+  const active = obsidianEval(`app.workspace.getActiveFile()?.basename`)
+  if (!active.includes('Beautiful Mermaid Test')) {
+    obsidianEval(
+      `app.workspace.openLinkText('Beautiful Mermaid Test', '', false); 'opened'`
+    )
+    sleep(1000)
+    console.log('  Opened "Beautiful Mermaid Test" note')
+  }
+}
+
+function captureElement(cfg: ScreenshotConfig): void {
+  const outPath = `${outDir}/${cfg.name}.png`
+
+  // Step 1: Scroll element into view
+  obsidianEval(`
+    const el = document.querySelectorAll('${cfg.selector}')[${cfg.index}];
+    if (!el) throw new Error('Element not found');
+    el.scrollIntoView({ block: 'center' });
+    'scrolled'
+  `)
+
+  // Wait for scroll + render to settle
+  sleep(600)
+
+  // Step 2: Read bounding rect
+  const rectJson = obsidianEval(`
+    const el = document.querySelectorAll('${cfg.selector}')[${cfg.index}];
+    const rect = el.getBoundingClientRect();
+    JSON.stringify({
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    })
+  `)
+
+  // Parse rect from "=> {...}" output
+  const rectStr = rectJson.replace(/^=>\s*/, '')
+  const rect = JSON.parse(rectStr)
+  console.log(`  ${cfg.name}: element at (${rect.x},${rect.y}) ${rect.width}x${rect.height}`)
+
+  // Step 3: Capture with capturePage using known coordinates
+  const captureRect = {
+    x: Math.max(0, rect.x - PAD),
+    y: Math.max(0, rect.y - PAD),
+    width: rect.width + PAD * 2,
+    height: rect.height + PAD * 2,
+  }
+
+  obsidianEval(`
+    (async () => {
+      const { remote } = require('electron');
+      const fs = require('fs');
+      const wc = remote.getCurrentWebContents();
+      const image = await wc.capturePage({
+        x: ${captureRect.x},
+        y: ${captureRect.y},
+        width: ${captureRect.width},
+        height: ${captureRect.height}
+      });
+      fs.writeFileSync('${outPath}', image.toPNG());
+    })()
+  `)
+
+  // Wait for async capture to complete
+  sleep(500)
+
+  console.log(`  ${cfg.name}.png saved`)
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
 
-const outDir = resolve(import.meta.dir, '..', 'screenshots')
+console.log('Screenshot capture via Obsidian + Electron capturePage\n')
 
-async function main() {
-  const browser = await chromium.launch()
+console.log('Setup:')
+ensureLightMode()
+ensureTestNoteOpen()
 
-  for (const cfg of CONFIGS) {
-    console.log(`Rendering ${cfg.name}...`)
+// Verify diagrams exist
+const counts = obsidianEval(`
+  document.querySelectorAll('.beautiful-mermaid-container').length +
+  ' SVG + ' +
+  document.querySelectorAll('.beautiful-mermaid-ascii').length +
+  ' ASCII'
+`)
+console.log(`  Found ${counts.replace('=> ', '')} diagrams\n`)
 
-    const html =
-      cfg.mode === 'svg'
-        ? renderSvgHtml(cfg.source, cfg.theme)
-        : renderAsciiHtml(cfg.source, cfg.theme)
-
-    const page = await browser.newPage({
-      deviceScaleFactor: 2,
-      viewport: { width: 1200, height: 2000 },
-    })
-    await page.setContent(html, { waitUntil: 'networkidle' })
-
-    // Wait for fonts to load (important for consistent rendering)
-    await page.evaluate(() => document.fonts.ready)
-
-    const el = page.locator('#diagram')
-    const box = await el.boundingBox()
-
-    if (!box) {
-      console.error(`  Could not find #diagram for ${cfg.name}, skipping`)
-      await page.close()
-      continue
-    }
-
-    // Use element screenshot with padding via clip on body
-    const pad = 32
-    const bg = cfg.theme.bg
-    await page.screenshot({
-      path: `${outDir}/${cfg.name}.png`,
-      clip: {
-        x: Math.max(0, box.x - pad),
-        y: Math.max(0, box.y - pad),
-        width: box.width + pad * 2,
-        height: box.height + pad * 2,
-      },
-    })
-
-    console.log(`  Saved ${cfg.name}.png (${Math.round(box.width)}x${Math.round(box.height)})`)
-    await page.close()
-  }
-
-  await browser.close()
-  console.log('\nDone! Screenshots saved to screenshots/')
+console.log('Capturing:')
+for (const cfg of CONFIGS) {
+  captureElement(cfg)
 }
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+console.log('\nDone! Screenshots saved to screenshots/')
