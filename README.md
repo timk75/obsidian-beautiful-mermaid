@@ -18,7 +18,7 @@ Obsidian ships with Mermaid support out of the box, but the default renderer off
 |:---------:|:----------------:|
 | ![Flowchart — ASCII](screenshots/flowchart-ascii.png) | ![Sequence Diagram — ASCII](screenshots/sequence-ascii.png) |
 
-See [showcase.md](showcase.md) for all 5 diagram types in both SVG and ASCII modes — open it in Obsidian with the plugin enabled.
+See [showcase.md](showcase.md) for all 6 diagram types in both SVG and ASCII modes — open it in Obsidian with the plugin enabled.
 
 ## What It Does
 
@@ -42,6 +42,7 @@ This works in both **Reading View** (via a registered code block processor) and 
 - **ASCII mode** — render diagrams as Unicode box-drawing text instead of SVG, useful for a minimalist or terminal-inspired aesthetic
 - **Per-diagram overrides** — add `%% ascii` or `%% svg` as the first comment line in any mermaid block to override the global default for that specific diagram
 - **Live Preview support** — diagrams re-render in real time as you edit, not just in Reading View
+- **Inline edge styling** — `linkStyle` support for custom edge colors and widths in flowcharts and state diagrams
 - **Synchronous rendering** — no flicker or loading states; diagrams appear instantly
 - **Two-color foundation** — each theme derives its full palette from background and foreground colors using CSS `color-mix()`, producing harmonious, consistent output
 
@@ -52,6 +53,7 @@ This works in both **Reading View** (via a registered code block processor) and 
 - State diagrams
 - Class diagrams
 - ER diagrams
+- XY Charts (bar, line, combined)
 
 ## Installation
 

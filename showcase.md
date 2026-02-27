@@ -208,3 +208,30 @@ erDiagram
         float price
     }
 ```
+
+---
+
+## 6. XY Chart
+
+### SVG
+
+```mermaid
+xychart-beta
+    title "Monthly Revenue vs Expenses"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun]
+    y-axis "Amount ($k)" 0 --> 120
+    bar [45, 52, 68, 73, 85, 95]
+    line [30, 35, 42, 48, 55, 62]
+```
+
+### ASCII
+
+```mermaid
+%% ascii
+xychart-beta
+    title "Monthly Revenue vs Expenses"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun]
+    y-axis "Amount ($k)" 0 --> 120
+    bar [45, 52, 68, 73, 85, 95]
+    line [30, 35, 42, 48, 55, 62]
+```
