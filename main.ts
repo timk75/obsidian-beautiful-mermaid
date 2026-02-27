@@ -200,11 +200,46 @@ export default class BeautifulMermaidPlugin extends Plugin {
 	renderIntoElement(source: string, el: HTMLElement) {
 		el.empty()
 		const [mode, cleanSource] = extractModeDirective(source, this.settings.defaultMode)
+
+		// Wrapper holds both rendered output and source toggle
+		const wrapper = el.createDiv({ cls: 'beautiful-mermaid-wrapper' })
+
 		if (mode === 'ascii') {
-			this.renderAscii(cleanSource, el)
+			this.renderAscii(cleanSource, wrapper)
 		} else {
-			this.renderSvg(cleanSource, el)
+			this.renderSvg(cleanSource, wrapper)
 		}
+
+		// Source toggle button
+		const btn = wrapper.createEl('button', {
+			cls: 'beautiful-mermaid-source-toggle',
+			attr: { 'aria-label': 'Toggle source' },
+			text: '</>',
+		})
+
+		let showingSource = false
+		btn.addEventListener('click', (e) => {
+			e.stopPropagation()
+			showingSource = !showingSource
+			const rendered = wrapper.querySelector<HTMLElement>('.beautiful-mermaid-container, .beautiful-mermaid-ascii')
+			const existing = wrapper.querySelector<HTMLElement>('.beautiful-mermaid-source')
+
+			if (showingSource) {
+				if (rendered) rendered.style.display = 'none'
+				if (!existing) {
+					const pre = wrapper.createEl('pre', { cls: 'beautiful-mermaid-source' })
+					const code = pre.createEl('code')
+					code.textContent = source
+				} else {
+					existing.style.display = ''
+				}
+				btn.setText('diagram')
+			} else {
+				if (rendered) rendered.style.display = ''
+				if (existing) existing.style.display = 'none'
+				btn.setText('</>')
+			}
+		})
 	}
 
 	renderSvg(source: string, el: HTMLElement) {

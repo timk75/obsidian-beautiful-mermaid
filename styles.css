@@ -53,6 +53,49 @@
   box-shadow: none !important;
 }
 
+/* Source toggle */
+.beautiful-mermaid-wrapper {
+  position: relative;
+}
+
+.beautiful-mermaid-source-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  font-size: 0.7em;
+  font-family: var(--font-monospace);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.beautiful-mermaid-wrapper:hover .beautiful-mermaid-source-toggle {
+  opacity: 1;
+}
+
+.beautiful-mermaid-source-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.beautiful-mermaid-source {
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  line-height: 1.4;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: var(--code-background);
+  overflow-x: auto;
+  white-space: pre;
+  margin: 8px 0;
+}
+
 .beautiful-mermaid-error {
   color: var(--text-error);
   font-size: 0.85em;
