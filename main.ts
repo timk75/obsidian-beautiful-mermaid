@@ -8,7 +8,7 @@
  * comment line in a mermaid block to override the global default.
  */
 
-import { Plugin, PluginSettingTab, App, Setting, Menu, Notice } from 'obsidian'
+import { Plugin, PluginSettingTab, App, Setting, Menu, Modal, Notice } from 'obsidian'
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view'
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid'
 import { renderMermaidASCII } from 'beautiful-mermaid'
@@ -193,6 +193,24 @@ export default class BeautifulMermaidPlugin extends Plugin {
 			menu.showAtMouseEvent(evt)
 		})
 
+		// Click to open full-size scrollable modal
+		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+			const target = evt.target as HTMLElement
+
+			// Don't open modal when clicking source toggle or source view
+			if (target.closest('.beautiful-mermaid-source-toggle, .beautiful-mermaid-source')) return
+
+			const container = target.closest('.beautiful-mermaid-container, .beautiful-mermaid-ascii')
+			if (!container) return
+
+			// Don't open modal if user is selecting text
+			const selection = window.getSelection()
+			if (selection && selection.toString().length > 0) return
+
+			const modal = new DiagramModal(this.app, container as HTMLElement)
+			modal.open()
+		})
+
 		this.addSettingTab(new BeautifulMermaidSettingTab(this.app, this))
 	}
 
@@ -201,7 +219,6 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		el.empty()
 		const [mode, cleanSource] = extractModeDirective(source, this.settings.defaultMode)
 
-		// Wrapper holds both rendered output and source toggle
 		const wrapper = el.createDiv({ cls: 'beautiful-mermaid-wrapper' })
 
 		if (mode === 'ascii') {
@@ -211,33 +228,36 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		}
 
 		// Source toggle button
-		const btn = wrapper.createEl('button', {
+		const toggleBtn = wrapper.createEl('button', {
 			cls: 'beautiful-mermaid-source-toggle',
-			attr: { 'aria-label': 'Toggle source' },
 			text: '</>',
 		})
 
 		let showingSource = false
-		btn.addEventListener('click', (e) => {
+		let sourceEl: HTMLElement | null = null
+
+		toggleBtn.addEventListener('click', (e) => {
 			e.stopPropagation()
-			showingSource = !showingSource
-			const rendered = wrapper.querySelector<HTMLElement>('.beautiful-mermaid-container, .beautiful-mermaid-ascii')
-			const existing = wrapper.querySelector<HTMLElement>('.beautiful-mermaid-source')
+			e.preventDefault()
 
 			if (showingSource) {
-				if (rendered) rendered.style.display = 'none'
-				if (!existing) {
-					const pre = wrapper.createEl('pre', { cls: 'beautiful-mermaid-source' })
-					const code = pre.createEl('code')
-					code.textContent = source
-				} else {
-					existing.style.display = ''
+				// Switch back to rendered view
+				if (sourceEl) {
+					sourceEl.remove()
+					sourceEl = null
 				}
-				btn.setText('diagram')
-			} else {
+				const rendered = wrapper.querySelector('.beautiful-mermaid-container, .beautiful-mermaid-ascii') as HTMLElement
 				if (rendered) rendered.style.display = ''
-				if (existing) existing.style.display = 'none'
-				btn.setText('</>')
+				showingSource = false
+			} else {
+				// Switch to raw source
+				const rendered = wrapper.querySelector('.beautiful-mermaid-container, .beautiful-mermaid-ascii') as HTMLElement
+				if (rendered) rendered.style.display = 'none'
+				sourceEl = wrapper.createEl('pre', {
+					cls: 'beautiful-mermaid-source',
+					text: cleanSource.trim(),
+				})
+				showingSource = true
 			}
 		})
 	}
@@ -270,6 +290,17 @@ export default class BeautifulMermaidPlugin extends Plugin {
 			const pre = container.createEl('pre', { cls: 'beautiful-mermaid-ascii-pre' })
 			if (this.settings.transparent) pre.classList.add('beautiful-mermaid-transparent')
 			pre.textContent = text
+
+			// Scale down wide ASCII diagrams to fit container width.
+			// Double-rAF ensures styles are applied and layout is complete before measuring.
+			requestAnimationFrame(() => requestAnimationFrame(() => {
+				const naturalWidth = pre.offsetWidth
+				const containerWidth = container.clientWidth
+				if (naturalWidth > containerWidth && containerWidth > 0) {
+					const ratio = containerWidth / naturalWidth;
+					(pre.style as unknown as Record<string, string>).zoom = `${ratio}`
+				}
+			}))
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)
 			container.createDiv({
@@ -328,6 +359,44 @@ export default class BeautifulMermaidPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings)
 		this.app.workspace.updateOptions()
+	}
+}
+
+class DiagramModal extends Modal {
+	private sourceContainer: HTMLElement
+
+	constructor(app: App, sourceContainer: HTMLElement) {
+		super(app)
+		this.sourceContainer = sourceContainer
+	}
+
+	onOpen() {
+		const { contentEl, modalEl } = this
+		modalEl.addClass('beautiful-mermaid-modal')
+		contentEl.addClass('beautiful-mermaid-modal-content')
+
+		const svg = this.sourceContainer.querySelector('svg')
+		if (svg) {
+			const clone = svg.cloneNode(true) as SVGElement
+			clone.removeAttribute('width')
+			clone.removeAttribute('height')
+			clone.style.maxWidth = 'none'
+			clone.style.width = 'auto'
+			clone.style.height = 'auto'
+			contentEl.appendChild(clone)
+		} else {
+			const pre = this.sourceContainer.querySelector('pre')
+			if (pre) {
+				const clone = pre.cloneNode(true) as HTMLElement
+				clone.style.maxWidth = 'none'
+				clone.style.whiteSpace = 'pre'
+				contentEl.appendChild(clone)
+			}
+		}
+	}
+
+	onClose() {
+		this.contentEl.empty()
 	}
 }
 

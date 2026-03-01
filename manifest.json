@@ -1,7 +1,7 @@
 {
   "id": "beautiful-mermaid",
   "name": "Beautiful Mermaid",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "minAppVersion": "1.10.0",
   "description": "Render Mermaid diagrams with beautiful-mermaid — themed, high-quality SVG output.",
   "author": "Tim Kaiser",
