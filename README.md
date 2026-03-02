@@ -1,4 +1,4 @@
-# Beautiful Mermaid
+# Beautiful Mermaid for Obsidian
 
 An [Obsidian](https://obsidian.md) plugin that replaces the built-in Mermaid renderer with [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) — a modern rendering engine focused on aesthetics and flexibility.
 
