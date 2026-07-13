@@ -1,6 +1,6 @@
 {
   "name": "obsidian-beautiful-mermaid",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "type": "module",
   "repository": {
     "type": "git",
@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "node esbuild.config.mjs",
-    "dev": "node esbuild.config.mjs --watch"
+    "dev": "node esbuild.config.mjs --watch",
+    "test": "node --test --experimental-strip-types"
   },
   "dependencies": {
     "beautiful-mermaid": "^1.1.3"

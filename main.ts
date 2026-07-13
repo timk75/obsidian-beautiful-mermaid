@@ -14,11 +14,43 @@ import { renderMermaidSVG, THEMES } from 'beautiful-mermaid'
 import { renderMermaidASCII } from 'beautiful-mermaid'
 import type { RenderOptions } from 'beautiful-mermaid'
 import type { AsciiRenderOptions } from 'beautiful-mermaid'
+import { neutralizeXychartColors } from './xychart-colors'
+import { firstFontFamily } from './theme-font'
 
 type RenderMode = 'svg' | 'ascii'
 
 const LIGHT_THEMES = ['zinc-light', 'tokyo-night-light', 'catppuccin-latte', 'nord-light', 'github-light', 'solarized-light']
 const DARK_THEMES = ['zinc-dark', 'tokyo-night', 'tokyo-night-storm', 'catppuccin-mocha', 'nord', 'dracula', 'github-dark', 'solarized-dark', 'one-dark']
+
+/** Maps beautiful-mermaid color slots to the Obsidian CSS variables that carry
+ *  the equivalent color in the active theme. Read live so 'auto' diagrams track
+ *  whatever Obsidian theme (and light/dark mode) is currently applied.
+ *
+ *  Deliberately only bg/fg plus the neutral grey text tones. We do NOT map an
+ *  accent, surface, or border: beautiful-mermaid derives those from bg+fg into a
+ *  clean neutral baseline (subtle box contrast, accent rarely visible). Injecting
+ *  Obsidian's --interactive-accent/--text-accent here would splash the theme's
+ *  action color onto every arrowhead — the opposite of the intended monochrome
+ *  look. Color in a diagram should come only from inline `style`/`linkStyle`
+ *  directives in the source, which always override the theme. */
+const AUTO_VAR_MAP: Record<string, string> = {
+	bg: '--background-primary',
+	fg: '--text-normal',
+	line: '--text-muted',
+	muted: '--text-faint',
+}
+
+/** Resolve the active Obsidian theme's colors into beautiful-mermaid options. */
+function resolveAutoColors(): Partial<RenderOptions> {
+	const cs = getComputedStyle(document.body)
+	const out: Record<string, string> = {}
+	for (const [slot, varName] of Object.entries(AUTO_VAR_MAP)) {
+		const val = cs.getPropertyValue(varName).trim()
+		if (val) out[slot] = val
+	}
+	return out as Partial<RenderOptions>
+}
+
 
 interface BeautifulMermaidSettings {
 	themeLight: string
@@ -31,8 +63,8 @@ interface BeautifulMermaidSettings {
 }
 
 const DEFAULT_SETTINGS: BeautifulMermaidSettings = {
-	themeLight: 'catppuccin-latte',
-	themeDark: 'catppuccin-mocha',
+	themeLight: 'auto',
+	themeDark: 'auto',
 	font: 'Inter',
 	transparent: false,
 	defaultMode: 'svg',
@@ -82,7 +114,7 @@ function buildMermaidPlugin(plugin: BeautifulMermaidPlugin) {
 				const blocks = view.dom.querySelectorAll<HTMLElement>(
 					'.cm-preview-code-block.cm-lang-mermaid',
 				)
-				const settingsKey = `${plugin.activeTheme()}:${plugin.settings.font}:${plugin.settings.transparent}:${plugin.settings.defaultMode}:${plugin.settings.customBg}:${plugin.settings.customFg}`
+				const settingsKey = plugin.settingsSignature()
 
 				for (const block of blocks) {
 					// Skip if already processed with current settings
@@ -93,7 +125,20 @@ function buildMermaidPlugin(plugin: BeautifulMermaidPlugin) {
 					const source = extractSourceAtPos(view, pos)
 					if (!source) continue
 
-					plugin.renderIntoElement(source, block)
+					// Compute position of first content line inside the code block
+				const fenceLine = view.state.doc.lineAt(pos)
+				let contentLineFrom = fenceLine.to + 1 // line after fence
+				// Verify we're on the fence; if not, search backward
+				if (!/^```+\s*mermaid\s*$/.test(fenceLine.text.trimStart())) {
+					for (let i = fenceLine.number; i >= 1; i--) {
+						const l = view.state.doc.line(i)
+						if (/^```+\s*mermaid\s*$/.test(l.text.trimStart())) {
+							contentLineFrom = l.to + 1
+							break
+						}
+					}
+				}
+				plugin.renderIntoElement(source, block, view, contentLineFrom)
 					block.setAttribute(MARKER_ATTR, settingsKey)
 				}
 			}
@@ -146,14 +191,22 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		// Live Preview: ViewPlugin swaps Obsidian's embed block content post-render
 		this.registerEditorExtension(buildMermaidPlugin(this))
 
-		// Re-render on dark/light theme change
+		// Re-render on any appearance change: dark/light toggle, community-theme
+		// switch, or snippet edit. 'auto' diagrams inherit live Obsidian colors, so
+		// they must recolor on every css-change — the settings signature guard
+		// (see settingsSignature) skips blocks whose resolved colors are unchanged.
 		this.registerEvent(
 			this.app.workspace.on('css-change', () => {
-				const isDark = document.body.classList.contains('theme-dark')
-				if (isDark !== this.wasDark) {
-					this.wasDark = isDark
-					this.app.workspace.updateOptions()
-				}
+				this.wasDark = document.body.classList.contains('theme-dark')
+				this.app.workspace.updateOptions() // Live Preview
+				// Reading View: re-render stashed diagrams in place. Deferred a frame
+				// so the new theme's CSS variables are applied before we read them.
+				requestAnimationFrame(() => {
+					document.querySelectorAll<HTMLElement>('[data-bm-source]').forEach(el => {
+						const src = el.dataset.bmSource
+						if (src != null) this.renderIntoElement(src, el)
+					})
+				})
 			}),
 		)
 
@@ -214,9 +267,17 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		this.addSettingTab(new BeautifulMermaidSettingTab(this.app, this))
 	}
 
-	/** Render beautiful-mermaid output into a container element. */
-	renderIntoElement(source: string, el: HTMLElement) {
+	/** Render beautiful-mermaid output into a container element.
+	 *  When called from Live Preview, editorView and contentPos enable the source
+	 *  toggle to place the cursor into the code block for native editing.
+	 *  contentPos should point to the first content line (after the opening fence).
+	 */
+	renderIntoElement(source: string, el: HTMLElement, editorView?: EditorView, contentPos?: number) {
 		el.empty()
+		// Reading View renders once and never re-fires on theme change. Stash the
+		// source so the css-change handler can recolor it in place (Live Preview
+		// re-renders via updateOptions, so it doesn't need this).
+		if (!editorView) el.dataset.bmSource = source
 		const [mode, cleanSource] = extractModeDirective(source, this.settings.defaultMode)
 
 		const wrapper = el.createDiv({ cls: 'beautiful-mermaid-wrapper' })
@@ -240,8 +301,20 @@ export default class BeautifulMermaidPlugin extends Plugin {
 			e.stopPropagation()
 			e.preventDefault()
 
+			if (editorView && contentPos !== undefined) {
+				// Live Preview: place cursor inside the code block to trigger native editing.
+				// Defer to next frame so the click event finishes before CM6 processes the selection.
+				requestAnimationFrame(() => {
+					editorView.focus()
+					editorView.dispatch({
+						selection: { anchor: contentPos },
+					})
+				})
+				return
+			}
+
+			// Reading View: toggle read-only source display
 			if (showingSource) {
-				// Switch back to rendered view
 				if (sourceEl) {
 					sourceEl.remove()
 					sourceEl = null
@@ -250,7 +323,6 @@ export default class BeautifulMermaidPlugin extends Plugin {
 				if (rendered) rendered.style.display = ''
 				showingSource = false
 			} else {
-				// Switch to raw source
 				const rendered = wrapper.querySelector('.beautiful-mermaid-container, .beautiful-mermaid-ascii') as HTMLElement
 				if (rendered) rendered.style.display = 'none'
 				sourceEl = wrapper.createEl('pre', {
@@ -267,7 +339,10 @@ export default class BeautifulMermaidPlugin extends Plugin {
 
 		try {
 			const opts = this.buildSvgOptions()
-			const svg = renderMermaidSVG(source.trim(), opts)
+			let svg = renderMermaidSVG(source.trim(), opts)
+			// In auto mode, force xychart's hardcoded blue palette to the theme's
+			// neutral greys so charts stay monochrome like every other diagram type.
+			if (this.activeTheme() === 'auto') svg = neutralizeXychartColors(svg)
 			container.innerHTML = svg
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)
@@ -316,29 +391,63 @@ export default class BeautifulMermaidPlugin extends Plugin {
 		return isDark ? this.settings.themeDark : this.settings.themeLight
 	}
 
-	buildSvgOptions(): RenderOptions {
-		const opts: RenderOptions = {}
+	/** Resolve the active theme's color slots. 'auto' reads live Obsidian CSS
+	 *  variables; 'custom' uses the user's pickers; a named theme uses its preset. */
+	resolveColors(): Partial<RenderOptions> {
 		const theme = this.activeTheme()
-		const { font, transparent, customBg, customFg } = this.settings
 
-		if (theme === 'custom') {
-			if (customBg) opts.bg = customBg
-			if (customFg) opts.fg = customFg
-		} else if (theme && theme in THEMES) {
-			const colors = THEMES[theme as keyof typeof THEMES]
-			opts.bg = colors.bg
-			opts.fg = colors.fg
-			if (colors.line) opts.line = colors.line
-			if (colors.accent) opts.accent = colors.accent
-			if (colors.muted) opts.muted = colors.muted
-			if (colors.surface) opts.surface = colors.surface
-			if (colors.border) opts.border = colors.border
+		if (theme === 'auto') {
+			return resolveAutoColors()
 		}
 
-		if (font) opts.font = font
-		if (transparent) opts.transparent = true
+		if (theme === 'custom') {
+			const out: Partial<RenderOptions> = {}
+			if (this.settings.customBg) out.bg = this.settings.customBg
+			if (this.settings.customFg) out.fg = this.settings.customFg
+			return out
+		}
 
+		if (theme && theme in THEMES) {
+			const colors = THEMES[theme as keyof typeof THEMES]
+			const out: Partial<RenderOptions> = { bg: colors.bg, fg: colors.fg }
+			if (colors.line) out.line = colors.line
+			if (colors.accent) out.accent = colors.accent
+			if (colors.muted) out.muted = colors.muted
+			if (colors.surface) out.surface = colors.surface
+			if (colors.border) out.border = colors.border
+			return out
+		}
+
+		return {}
+	}
+
+	/** Font to render with. In auto mode, inherit Obsidian's --font-text (first
+	 *  family only — the lib wants a name, not a stack); otherwise the setting. */
+	effectiveFont(): string {
+		if (this.activeTheme() === 'auto') {
+			const fam = firstFontFamily(getComputedStyle(document.body).getPropertyValue('--font-text').trim())
+			if (fam) return fam
+		}
+		return this.settings.font
+	}
+
+	buildSvgOptions(): RenderOptions {
+		const opts: RenderOptions = { ...this.resolveColors() }
+		const font = this.effectiveFont()
+		if (font) opts.font = font
+		if (this.settings.transparent) opts.transparent = true
 		return opts
+	}
+
+	/** Stable signature of everything that affects rendered output. Used as the
+	 *  processed-marker so blocks re-render exactly when their colors change —
+	 *  including 'auto' blocks after an Obsidian theme switch (resolved colors move). */
+	settingsSignature(): string {
+		const colorSig = Object.entries(this.resolveColors())
+			.map(([k, v]) => `${k}=${v}`)
+			.join(',')
+		const { transparent, defaultMode } = this.settings
+		return `${colorSig}:${this.effectiveFont()}:${transparent}:${defaultMode}`
 	}
 
 	async loadSettings() {
@@ -427,8 +536,9 @@ class BeautifulMermaidSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Light theme')
-			.setDesc('Theme used when Obsidian is in light mode')
+			.setDesc('Theme used when Obsidian is in light mode. Auto inherits the active Obsidian theme’s colors.')
 			.addDropdown(drop => {
+				drop.addOption('auto', 'Auto (inherit from Obsidian)')
 				for (const name of LIGHT_THEMES) drop.addOption(name, name)
 				drop.addOption('custom', 'Custom')
 				drop.setValue(this.plugin.settings.themeLight)
@@ -441,8 +551,9 @@ class BeautifulMermaidSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Dark theme')
-			.setDesc('Theme used when Obsidian is in dark mode')
+			.setDesc('Theme used when Obsidian is in dark mode. Auto inherits the active Obsidian theme’s colors.')
 			.addDropdown(drop => {
+				drop.addOption('auto', 'Auto (inherit from Obsidian)')
 				for (const name of DARK_THEMES) drop.addOption(name, name)
 				drop.addOption('custom', 'Custom')
 				drop.setValue(this.plugin.settings.themeDark)

@@ -18,7 +18,7 @@ Obsidian ships with Mermaid support out of the box, but the default renderer off
 |:---------:|:----------------:|
 | ![Flowchart — ASCII](screenshots/flowchart-ascii.png) | ![Sequence Diagram — ASCII](screenshots/sequence-ascii.png) |
 
-See [showcase.md](showcase.md) for all 6 diagram types in both SVG and ASCII modes — open it in Obsidian with the plugin enabled.
+See [showcase.md](showcase.md) for all 6 diagram types in both SVG and ASCII modes — the ASCII blocks there are pre-rendered so they display right on GitHub; open the file in Obsidian with the plugin enabled to see everything rendered live.
 
 ## What It Does
 
@@ -32,12 +32,11 @@ This works in both **Reading View** (via a registered code block processor) and 
 
 ## Features
 
-- **15 built-in themes** — 6 light themes and 9 dark themes including Catppuccin, Dracula, Nord, Solarized, Tokyo Night, GitHub, and One Dark
-- **Automatic light/dark mode** — set separate themes for light and dark mode; diagrams re-render automatically when you toggle Obsidian's appearance
-- **Custom theme** — define your own background and foreground colors; the library auto-derives accent, muted, surface, and border colors
+- **Inherits your Obsidian theme (default)** — the `Auto` theme reads your active theme's colors and font, so diagrams match your vault automatically in both light and dark mode. Diagrams stay clean and monochrome (no injected accent); color comes only from your theme and from inline `style`/`linkStyle` directives in the diagram source. It tracks live changes, including Style Settings tweaks, and re-colors in both Reading View and Live Preview the moment you switch appearance or theme.
+- **15 built-in themes + custom colors** — prefer a fixed palette? Choose from 6 light and 9 dark themes including Catppuccin, Dracula, Nord, Solarized, Tokyo Night, GitHub, and One Dark, or define your own background and foreground (the library auto-derives accent, muted, surface, and border). These are opt-in overrides of the `Auto` default, set separately for light and dark mode.
 - **SVG export** — right-click any rendered diagram to copy SVG to clipboard or export as a standalone `.svg` file
 - **Click to expand** — wide diagrams fit to container width by default; click/tap to expand to natural size with horizontal scrolling, click again to collapse
-- **Custom fonts** — use any font installed on your system for diagram text (default: Inter)
+- **Inherited & custom fonts** — in `Auto` mode diagram text uses your theme's font; or set any font installed on your system for the fixed themes (default: Inter)
 - **Transparent backgrounds** — render SVG diagrams with no background, so they blend with your vault theme
 - **ASCII mode** — render diagrams as Unicode box-drawing text instead of SVG, useful for a minimalist or terminal-inspired aesthetic
 - **Per-diagram overrides** — add `%% ascii` or `%% svg` as the first comment line in any mermaid block to override the global default for that specific diagram
@@ -86,14 +85,16 @@ BRAT will automatically notify you when new versions are released.
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Default render mode | SVG (themed vector) or ASCII (Unicode box-drawing) | SVG |
-| Light theme | Color theme used when Obsidian is in light mode | catppuccin-latte |
-| Dark theme | Color theme used when Obsidian is in dark mode | catppuccin-mocha |
-| Custom background | Background color (only when theme = Custom) | #ffffff |
-| Custom foreground | Text/line color (only when theme = Custom) | #000000 |
-| Font | Font family for diagram text | Inter |
+| Light theme | `Auto` (inherit Obsidian), a built-in theme, or Custom — used in light mode | Auto |
+| Dark theme | `Auto` (inherit Obsidian), a built-in theme, or Custom — used in dark mode | Auto |
+| Custom background | Background color (only when a theme = Custom) | #ffffff |
+| Custom foreground | Text/line color (only when a theme = Custom) | #000000 |
+| Font | Font family for diagram text (used by the non-`Auto` themes) | Inter |
 | Transparent background | Render with no background color | Off |
 
 ## Available Themes
+
+`Auto` (the default) inherits your active Obsidian theme. The following fixed palettes are available as opt-in overrides:
 
 ### Light
 
@@ -153,7 +154,7 @@ The plugin registers two rendering hooks:
 
 Both paths share the same rendering logic: parse the settings, check for per-diagram `%% ascii`/`%% svg` directives, and call the appropriate beautiful-mermaid render function.
 
-A marker attribute (`data-beautiful-mermaid`) tracks which blocks have been processed and with which settings, so diagrams only re-render when the source or settings actually change.
+A marker attribute (`data-beautiful-mermaid`) tracks which blocks have been processed and with which settings, so diagrams only re-render when the source or settings actually change. When you switch Obsidian's appearance or theme, both Reading View and Live Preview diagrams re-color automatically.
 
 ## Versioning and Releases
 
