@@ -3,6 +3,8 @@
   display: flex;
   justify-content: center;
   padding: 8px 0;
+  width: 100%;
+  min-width: 0;
 }
 
 .beautiful-mermaid-container,
@@ -12,6 +14,7 @@
 
 .beautiful-mermaid-container svg {
   max-width: 100%;
+  width: auto;
   height: auto;
 }
 
@@ -79,6 +82,8 @@
 /* Source toggle wrapper */
 .beautiful-mermaid-wrapper {
   position: relative;
+  width: 100%;
+  min-width: 0;
 }
 
 .beautiful-mermaid-source-toggle {

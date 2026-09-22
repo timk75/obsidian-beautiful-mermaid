@@ -16,6 +16,7 @@ import type { RenderOptions } from 'beautiful-mermaid'
 import type { AsciiRenderOptions } from 'beautiful-mermaid'
 import { neutralizeXychartColors } from './xychart-colors'
 import { firstFontFamily } from './theme-font'
+import { fitZoom } from './ascii-fit'
 
 type RenderMode = 'svg' | 'ascii'
 
@@ -180,8 +181,29 @@ export default class BeautifulMermaidPlugin extends Plugin {
 	settings: BeautifulMermaidSettings = DEFAULT_SETTINGS
 	private wasDark = document.body.classList.contains('theme-dark')
 
+	// Refits wide ASCII diagrams whenever their container width changes. A
+	// one-shot measure is not enough: Live Preview often builds the block before
+	// it is laid out (width 0), and pane resizes change the available width.
+	private asciiFitWidths = new WeakMap<Element, number>()
+	private asciiFitObserver = new ResizeObserver((entries) => {
+		for (const entry of entries) {
+			const container = entry.target as HTMLElement
+			const width = container.clientWidth
+			if (this.asciiFitWidths.get(container) === width) continue
+			const pre = container.querySelector<HTMLElement>('.beautiful-mermaid-ascii-pre')
+			if (!pre) continue
+			const style = pre.style as unknown as Record<string, string>
+			style.zoom = ''
+			const ratio = fitZoom(pre.offsetWidth, width)
+			if (ratio === null) continue
+			this.asciiFitWidths.set(container, width)
+			if (ratio < 1) style.zoom = `${ratio}`
+		}
+	})
+
 	async onload() {
 		await this.loadSettings()
+		this.register(() => this.asciiFitObserver.disconnect())
 
 		// Reading View: registered processor replaces Obsidian's built-in mermaid
 		this.registerMarkdownCodeBlockProcessor('mermaid', (source, el, ctx) => {
@@ -366,16 +388,8 @@ export default class BeautifulMermaidPlugin extends Plugin {
 			if (this.settings.transparent) pre.classList.add('beautiful-mermaid-transparent')
 			pre.textContent = text
 
-			// Scale down wide ASCII diagrams to fit container width.
-			// Double-rAF ensures styles are applied and layout is complete before measuring.
-			requestAnimationFrame(() => requestAnimationFrame(() => {
-				const naturalWidth = pre.offsetWidth
-				const containerWidth = container.clientWidth
-				if (naturalWidth > containerWidth && containerWidth > 0) {
-					const ratio = containerWidth / naturalWidth;
-					(pre.style as unknown as Record<string, string>).zoom = `${ratio}`
-				}
-			}))
+			// Scale down wide ASCII diagrams to fit container width (see asciiFitObserver).
+			this.asciiFitObserver.observe(container)
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)
 			container.createDiv({
